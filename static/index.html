@@ -373,10 +373,8 @@
       </div>
 
       <div class="container">
-
         <!-- Employee Dashboard -->
         <div id="employee-dash" style="display: none">
-
           <div class="card">
             <h2>📌 Check In</h2>
             <div class="checkin-box">
@@ -396,54 +394,93 @@
             <h2>📋 My Attendance History</h2>
             <div id="my-history"><div class="loading">Loading...</div></div>
           </div>
-
         </div>
 
         <!-- Employer Dashboard -->
         <div id="employer-dash" style="display: none">
-
-          <div class="card">
-            <h2>🏢 Office Settings</h2>
-
-            <div class="field">
-              <label>Office Start Time</label>
-              <input id="office-start" type="time" />
-            </div>
-
-            <div class="field">
-              <label>Office End Time</label>
-              <input id="office-end" type="time" />
-            </div>
-
-            <div class="field">
-              <label>Office Latitude</label>
-              <input id="office-lat" type="number" step="any" />
-            </div>
-
-            <div class="field">
-              <label>Office Longitude</label>
-              <input id="office-lng" type="number" step="any" />
-            </div>
-
+          <!-- <div class="card">
+            <h2>🏢 Office Settings</h2> -->
+          <div class="dash-tabs">
             <button
-              class="btn-logout"
-              style="margin-bottom: 14px"
-              onclick="detectOfficeLocation()"
+              class="tab active"
+              id="emp-tab-btn"
+              onclick="switchEmployerTab('employees')"
             >
-              Detect current location
+              Employee
             </button>
 
-            <div class="field">
-              <label>Allowed Radius (meters)</label>
-              <input id="office-radius" type="number" />
-            </div>
-
-            <button class="btn-primary" onclick="saveOfficeSettings()">
-              Save Settings
+            <button
+              class="tab"
+              id="settings-tab-btn"
+              onclick="switchEmployerTab('settings')"
+            >
+              Settings
             </button>
           </div>
 
-          <div class="card" id="emp-list-card">
+          <div id="employees-tab">
+            <div class="card" id="emp-list-card">
+              <h2>👥 Employees</h2>
+              <div id="employee-list" class="employee-list">
+                <div class="loading">Loading...</div>
+              </div>
+            </div>
+
+            <div class="card" id="emp-detail-card" style="display: none">
+              <button class="back-btn" onclick="showEmployeeList()">
+                ← Back
+              </button>
+              <h2 id="emp-detail-title">Attendance History</h2>
+              <div id="emp-detail-table">
+                <div class="loading">Loading...</div>
+              </div>
+            </div>
+          </div>
+
+          <div id="settings-tab" style="display: none">
+            <div class="card">
+              <h2>🏢 Office Settings</h2>
+
+              <div class="field">
+                <label>Office Start Time</label>
+                <input id="office-start" type="time" />
+              </div>
+
+              <div class="field">
+                <label>Office End Time</label>
+                <input id="office-end" type="time" />
+              </div>
+
+              <div class="field">
+                <label>Office Latitude</label>
+                <input id="office-lat" type="number" step="any" />
+              </div>
+
+              <div class="field">
+                <label>Office Longitude</label>
+                <input id="office-lng" type="number" step="any" />
+              </div>
+
+              <button
+                class="btn-logout"
+                style="margin-bottom: 14px"
+                onclick="detectOfficeLocation()"
+              >
+                Detect current location
+              </button>
+
+              <div class="field">
+                <label>Allowed Radius (meters)</label>
+                <input id="office-radius" type="number" />
+              </div>
+
+              <button class="btn-primary" onclick="saveOfficeSettings()">
+                Save Settings
+              </button>
+            </div>
+          </div>
+
+          <!-- <div class="card" id="emp-list-card">
             <h2>👥 Employees</h2>
             <div id="employee-list" class="employee-list">
               <div class="loading">Loading...</div>
@@ -458,8 +495,7 @@
             <div id="emp-detail-table">
               <div class="loading">Loading...</div>
             </div>
-          </div>
-
+          </div> -->
         </div>
       </div>
     </div>
@@ -618,6 +654,22 @@
           .join("");
       }
 
+      function switchEmployerTab(tab) {
+        document.getElementById("employees-tab").style.display =
+          tab === "employees" ? "" : "none";
+
+        document.getElementById("settings-tab").style.display =
+          tab === "settings" ? "" : "none";
+
+        document
+          .getElementById("emp-tab-btn")
+          .classList.toggle("active", tab === "employees");
+
+        document
+          .getElementById("settings-tab-btn")
+          .classList.toggle("active", tab === "settings");
+      }
+
       async function loadOfficeSettings() {
         const data = await api("/api/office-settings");
         if (data.error) return;
@@ -647,10 +699,8 @@
       function detectOfficeLocation() {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            document.getElementById("office-lat").value =
-              pos.coords.latitude;
-            document.getElementById("office-lng").value =
-              pos.coords.longitude;
+            document.getElementById("office-lat").value = pos.coords.latitude;
+            document.getElementById("office-lng").value = pos.coords.longitude;
           },
           () => {
             alert("Unable to detect location");

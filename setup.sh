@@ -1,6 +1,8 @@
 BLUE='\e[34m'
 NC='\e[0m' # No Color
 
+clear
+
 echo -e  "${BLUE}Moving to root directory...${NC}"
 cd /var/www/html/office/Attendance-Tracker/
 
@@ -16,8 +18,8 @@ source venv/bin/activate
 echo -e "${BLUE}Installing requirements...${NC}"
 pip install -r requirements.txt
 
-echo -e "${BLUE}Updating requirements...${NC}"
-pip freeze > requirements.txt
+echo -e "${BLUE}Killing previous uvicorn process (of still alive)...${NC}"
+kill -9 $(lsof -t -i:8000)
 
 echo -e "${BLUE}Starting Uvicorn...${NC}"
 uvicorn main:app --reload --port 8000
