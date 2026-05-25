@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AttendTrack</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Segoe UI", sans-serif;
+        background: #f0f2f5;
+        color: #222;
+        min-height: 100vh;
+      }
+
+      /* ── AUTH PAGE ── */
+      #auth-page {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .auth-card {
+        background: white;
+        border-radius: 16px;
+        padding: 40px;
+        width: 360px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+      }
+      .auth-card h1 {
+        font-size: 1.6rem;
+        margin-bottom: 6px;
+        color: #1a56db;
+      }
+      .auth-card p {
+        font-size: 0.85rem;
+        color: #666;
+        margin-bottom: 24px;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 24px;
+      }
+      .tab {
+        flex: 1;
+        padding: 8px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        background: white;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+      }
+      .tab.active {
+        border-color: #1a56db;
+        background: #eff6ff;
+        color: #1a56db;
+        font-weight: 600;
+      }
+      .field {
+        margin-bottom: 14px;
+      }
+      .field label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #444;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .field input,
+      .field select {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        outline: none;
+        transition: border 0.2s;
+      }
+      .field input:focus,
+      .field select:focus {
+        border-color: #1a56db;
+      }
+      .btn-primary {
+        width: 100%;
+        padding: 12px;
+        background: #1a56db;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .btn-primary:hover {
+        background: #1648c0;
+      }
+      .msg {
+        margin-top: 12px;
+        font-size: 0.85rem;
+        text-align: center;
+        min-height: 18px;
+      }
+      .msg.err {
+        color: #e02424;
+      }
+      .msg.ok {
+        color: #057a55;
+      }
+
+      /* ── DASHBOARD ── */
+      #dashboard {
+        display: none;
+      }
+      .topbar {
+        background: white;
+        padding: 14px 32px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+      }
+      .topbar .brand {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1a56db;
+      }
+      .topbar .user-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 0.9rem;
+      }
+      .badge {
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .badge-employee {
+        background: #def7ec;
+        color: #057a55;
+      }
+      .badge-employer {
+        background: #e1effe;
+        color: #1a56db;
+      }
+      .btn-logout {
+        padding: 6px 14px;
+        background: #f9fafb;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+      }
+      .btn-logout:hover {
+        background: #fee2e2;
+        border-color: #f87171;
+        color: #b91c1c;
+      }
+      .container {
+        max-width: 900px;
+        margin: 32px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 1px 8px rgba(0, 0, 0, 0.07);
+        margin-bottom: 24px;
+      }
+      .card h2 {
+        font-size: 1.1rem;
+        margin-bottom: 16px;
+        color: #111;
+      }
+
+      /* ── CHECKIN ── */
+      .checkin-box {
+        text-align: center;
+        padding: 12px 0;
+      }
+      .checkin-box p {
+        color: #666;
+        font-size: 0.9rem;
+        margin-bottom: 16px;
+      }
+      .btn-checkin {
+        padding: 14px 36px;
+        background: #057a55;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1.05rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .btn-checkin:hover {
+        background: #046c4e;
+      }
+      .btn-checkin:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+      .checkin-status {
+        margin-top: 12px;
+        font-size: 0.9rem;
+        color: #057a55;
+        min-height: 20px;
+      }
+
+      /* ── TABLE ── */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th {
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 2px solid #e5e7eb;
+        color: #555;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      tr:hover td {
+        background: #f9fafb;
+      }
+      .empty {
+        text-align: center;
+        color: #aaa;
+        padding: 24px;
+        font-size: 0.9rem;
+      }
+
+      /* ── EMPLOYER ── */
+      .employee-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .emp-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .emp-row:hover {
+        border-color: #1a56db;
+        background: #f8faff;
+      }
+      .emp-row .name {
+        font-weight: 600;
+      }
+      .emp-row .arrow {
+        color: #1a56db;
+        font-size: 1.1rem;
+      }
+      .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 16px;
+        padding: 6px 12px;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 6px;
+        cursor: pointer;
+        background: white;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+      }
+      .back-btn:hover {
+        border-color: #1a56db;
+        color: #1a56db;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 20px;
+        color: #aaa;
+      }
+
+      .dash-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ══ AUTH PAGE ══════════════════════════════════════════ -->
+    <div id="auth-page">
+      <div class="auth-card">
+        <h1>AttendTrack</h1>
+        <p>Location-based attendance system</p>
+        <div class="tabs">
+          <button class="tab active" onclick="switchTab('login')">Login</button>
+          <button class="tab" onclick="switchTab('signup')">Sign Up</button>
+        </div>
+
+        <div id="login-form">
+          <div class="field">
+            <label>Username</label
+            ><input id="l-user" type="text" placeholder="Enter username" />
+          </div>
+          <div class="field">
+            <label>Password</label
+            ><input id="l-pass" type="password" placeholder="Enter password" />
+          </div>
+          <button class="btn-primary" onclick="doLogin()">Login</button>
+        </div>
+
+        <div id="signup-form" style="display: none">
+          <div class="field">
+            <label>Username</label
+            ><input id="s-user" type="text" placeholder="Choose username" />
+          </div>
+          <div class="field">
+            <label>Password</label
+            ><input id="s-pass" type="password" placeholder="Choose password" />
+          </div>
+          <div class="field">
+            <label>Role</label>
+            <select id="s-role">
+              <option value="employee">Employee</option>
+              <option value="employer">Employer</option>
+            </select>
+          </div>
+          <button class="btn-primary" onclick="doSignup()">
+            Create Account
+          </button>
+        </div>
+
+        <div id="auth-msg" class="msg"></div>
+      </div>
+    </div>
+
+    <!-- ══ DASHBOARD ══════════════════════════════════════════ -->
+    <div id="dashboard">
+      <div class="topbar">
+        <div class="brand">📍 AttendTrack</div>
+        <div class="user-info">
+          <span id="top-username"></span>
+          <span id="top-badge" class="badge"></span>
+          <button class="btn-logout" onclick="logout()">Logout</button>
+        </div>
+      </div>
+
+      <div class="container">
+
+        <!-- Employee Dashboard -->
+        <div id="employee-dash" style="display: none">
+
+          <div class="card">
+            <h2>📌 Check In</h2>
+            <div class="checkin-box">
+              <p>Tap to record your attendance with current location</p>
+              <button
+                class="btn-checkin"
+                id="checkin-btn"
+                onclick="doCheckin()"
+              >
+                ✅ Check In Now
+              </button>
+              <div class="checkin-status" id="checkin-status"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>📋 My Attendance History</h2>
+            <div id="my-history"><div class="loading">Loading...</div></div>
+          </div>
+
+        </div>
+
+        <!-- Employer Dashboard -->
+        <div id="employer-dash" style="display: none">
+
+          <div class="card">
+            <h2>🏢 Office Settings</h2>
+
+            <div class="field">
+              <label>Office Start Time</label>
+              <input id="office-start" type="time" />
+            </div>
+
+            <div class="field">
+              <label>Office End Time</label>
+              <input id="office-end" type="time" />
+            </div>
+
+            <div class="field">
+              <label>Office Latitude</label>
+              <input id="office-lat" type="number" step="any" />
+            </div>
+
+            <div class="field">
+              <label>Office Longitude</label>
+              <input id="office-lng" type="number" step="any" />
+            </div>
+
+            <button
+              class="btn-logout"
+              style="margin-bottom: 14px"
+              onclick="detectOfficeLocation()"
+            >
+              Detect current location
+            </button>
+
+            <div class="field">
+              <label>Allowed Radius (meters)</label>
+              <input id="office-radius" type="number" />
+            </div>
+
+            <button class="btn-primary" onclick="saveOfficeSettings()">
+              Save Settings
+            </button>
+          </div>
+
+          <div class="card" id="emp-list-card">
+            <h2>👥 Employees</h2>
+            <div id="employee-list" class="employee-list">
+              <div class="loading">Loading...</div>
+            </div>
+          </div>
+
+          <div class="card" id="emp-detail-card" style="display: none">
+            <button class="back-btn" onclick="showEmployeeList()">
+              ← Back
+            </button>
+            <h2 id="emp-detail-title">Attendance History</h2>
+            <div id="emp-detail-table">
+              <div class="loading">Loading...</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // ── STATE ─────────────────────────────────────────────────
+      let token = localStorage.getItem("token");
+      let role = localStorage.getItem("role");
+      let username = localStorage.getItem("username");
+
+      // ── INIT ──────────────────────────────────────────────────
+      if (token) showDashboard();
+
+      // ── AUTH HELPERS ──────────────────────────────────────────
+      function switchTab(tab) {
+        document
+          .querySelectorAll(".tab")
+          .forEach((t, i) =>
+            t.classList.toggle("active", (i === 0) === (tab === "login"))
+          );
+        document.getElementById("login-form").style.display =
+          tab === "login" ? "" : "none";
+        document.getElementById("signup-form").style.display =
+          tab === "signup" ? "" : "none";
+        setMsg("");
+      }
+
+      function setMsg(txt, isErr = true) {
+        const el = document.getElementById("auth-msg");
+        el.textContent = txt;
+        el.className = "msg " + (isErr ? "err" : "ok");
+      }
+
+      async function doLogin() {
+        const u = document.getElementById("l-user").value.trim();
+        const p = document.getElementById("l-pass").value;
+        if (!u || !p) return setMsg("Fill all fields");
+        const res = await api("/api/login", "POST", {
+          username: u,
+          password: p,
+        });
+        if (res.error) return setMsg(res.error);
+        localStorage.setItem("token", res.token);
+        localStorage.setItem("role", res.role);
+        localStorage.setItem("username", res.username);
+        token = res.token;
+        role = res.role;
+        username = res.username;
+        showDashboard();
+      }
+
+      async function doSignup() {
+        const u = document.getElementById("s-user").value.trim();
+        const p = document.getElementById("s-pass").value;
+        const r = document.getElementById("s-role").value;
+        if (!u || !p) return setMsg("Fill all fields");
+        const res = await api("/api/signup", "POST", {
+          username: u,
+          password: p,
+          role: r,
+        });
+        if (res.error) return setMsg(res.error);
+        setMsg("Account created! Login now.", false);
+        switchTab("login");
+      }
+
+      function logout() {
+        localStorage.clear();
+        token = role = username = null;
+        document.getElementById("auth-page").style.display = "flex";
+        document.getElementById("dashboard").style.display = "none";
+      }
+
+      // ── DASHBOARD ─────────────────────────────────────────────
+      function showDashboard() {
+        try {
+          document.getElementById("auth-page").style.display = "none";
+          document.getElementById("dashboard").style.display = "block";
+          document.getElementById("top-username").textContent = username || "";
+          const badge = document.getElementById("top-badge");
+          badge.textContent = role || "";
+          badge.className = "badge badge-" + (role || "");
+
+          // hide both first, show correct one
+          document.getElementById("employee-dash").style.display = "none";
+          document.getElementById("employer-dash").style.display = "none";
+
+          if (role === "employee") {
+            document.getElementById("employee-dash").style.display = "block";
+            loadMyHistory();
+          } else if (role === "employer") {
+            document.getElementById("employer-dash").style.display = "block";
+            loadOfficeSettings();
+            loadEmployees();
+          } else {
+            console.error("Unknown role:", role);
+          }
+        } catch (e) {
+          console.error("showDashboard error:", e);
+        }
+      }
+
+      // ── EMPLOYEE ACTIONS ──────────────────────────────────────
+      async function doCheckin() {
+        const btn = document.getElementById("checkin-btn");
+        const status = document.getElementById("checkin-status");
+        btn.disabled = true;
+        status.textContent = "📡 Getting location...";
+
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            const { latitude, longitude } = pos.coords;
+            const res = await api("/api/checkin", "POST", {
+              latitude,
+              longitude,
+            });
+            if (res.error) {
+              status.textContent = "❌ " + res.error;
+            } else {
+              status.textContent = `✅ Checked in at ${new Date().toLocaleTimeString()} (${latitude.toFixed(
+                5
+              )}, ${longitude.toFixed(5)})`;
+              loadMyHistory();
+            }
+            btn.disabled = false;
+          },
+          (err) => {
+            status.textContent = "❌ Location denied. Enable browser location.";
+            btn.disabled = false;
+          }
+        );
+      }
+
+      async function loadMyHistory() {
+        const rows = await api("/api/my-attendance");
+        const el = document.getElementById("my-history");
+        el.innerHTML = renderTable(rows);
+      }
+
+      // ── EMPLOYER ACTIONS ──────────────────────────────────────
+      async function loadEmployees() {
+        const data = await api("/api/employees");
+        const el = document.getElementById("employee-list");
+        if (!data.length) {
+          el.innerHTML = '<div class="empty">No employees yet</div>';
+          return;
+        }
+        el.innerHTML = data
+          .map(
+            (e) =>
+              `<div class="emp-row" onclick="viewEmployee(${e.id}, '${e.username}')">
+                <span class="name">👤 ${e.username}</span>
+                <span class="arrow">›</span>
+              </div>`
+          )
+          .join("");
+      }
+
+      async function loadOfficeSettings() {
+        const data = await api("/api/office-settings");
+        if (data.error) return;
+
+        document.getElementById("office-start").value = data.start_time || "";
+        document.getElementById("office-end").value = data.end_time || "";
+        document.getElementById("office-lat").value = data.latitude || "";
+        document.getElementById("office-lng").value = data.longitude || "";
+        document.getElementById("office-radius").value =
+          data.radius_meters || "";
+      }
+
+      async function saveOfficeSettings() {
+        const res = await api("/api/office-settings", "POST", {
+          start_time: document.getElementById("office-start").value,
+          end_time: document.getElementById("office-end").value,
+          latitude: parseFloat(document.getElementById("office-lat").value),
+          longitude: parseFloat(document.getElementById("office-lng").value),
+          radius_meters: parseFloat(
+            document.getElementById("office-radius").value
+          ),
+        });
+
+        alert(res.error || res.message);
+      }
+
+      function detectOfficeLocation() {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            document.getElementById("office-lat").value =
+              pos.coords.latitude;
+            document.getElementById("office-lng").value =
+              pos.coords.longitude;
+          },
+          () => {
+            alert("Unable to detect location");
+          }
+        );
+      }
+
+      async function viewEmployee(id, name) {
+        document.getElementById("emp-list-card").style.display = "none";
+        document.getElementById("emp-detail-card").style.display = "";
+        document.getElementById(
+          "emp-detail-title"
+        ).textContent = `📋 ${name}'s Attendance`;
+        document.getElementById("emp-detail-table").innerHTML =
+          '<div class="loading">Loading...</div>';
+        const rows = await api(`/api/attendance/${id}`);
+        document.getElementById("emp-detail-table").innerHTML =
+          renderTable(rows);
+      }
+
+      function showEmployeeList() {
+        document.getElementById("emp-detail-card").style.display = "none";
+        document.getElementById("emp-list-card").style.display = "";
+      }
+
+      // ── HELPERS ───────────────────────────────────────────────
+      function renderTable(rows) {
+        if (!rows || rows.error || rows.length === 0)
+          return '<div class="empty">No records found</div>';
+        return `<table>
+          <thead><tr><th>#</th><th>Date & Time</th><th>Latitude</th><th>Longitude</th></tr></thead>
+          <tbody>${rows
+            .map(
+              (r, i) => `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${new Date(r.checkin_time).toLocaleString()}</td>
+              <td>${r.latitude?.toFixed(6) ?? "—"}</td>
+              <td>${r.longitude?.toFixed(6) ?? "—"}</td>
+            </tr>`
+            )
+            .join("")}
+          </tbody>
+        </table>`;
+      }
+
+      async function api(path, method = "GET", body = null) {
+        const opts = {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        };
+        if (body) opts.body = JSON.stringify(body);
+        try {
+          const res = await fetch(path, opts);
+          const data = await res.json();
+          if (!res.ok) return { error: data.detail || "Request failed" };
+          return data;
+        } catch (e) {
+          return { error: "Network error" };
+        }
+      }
+    </script>
+  </body>
+</html>
