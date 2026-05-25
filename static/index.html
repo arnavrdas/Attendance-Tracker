@@ -1,9 +1,10 @@
+<!-- /static/index.html -->
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AttendTrack</title>
+    <title>CheckPoint</title>
     <style>
       * {
         box-sizing: border-box;
@@ -145,11 +146,11 @@
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
-      .badge-employee {
+      .badge-user {
         background: #def7ec;
         color: #057a55;
       }
-      .badge-employer {
+      .badge-organization {
         background: #e1effe;
         color: #1a56db;
       }
@@ -185,17 +186,17 @@
         color: #111;
       }
 
-      /* ── CHECKIN ── */
-      .checkin-box {
+      /* ── VERRIFY-IN ── */
+      .verify-in-box {
         text-align: center;
         padding: 12px 0;
       }
-      .checkin-box p {
+      .verify-in-box p {
         color: #666;
         font-size: 0.9rem;
         margin-bottom: 16px;
       }
-      .btn-checkin {
+      .btn-verify-in {
         padding: 14px 36px;
         background: #057a55;
         color: white;
@@ -209,14 +210,14 @@
         align-items: center;
         gap: 8px;
       }
-      .btn-checkin:hover {
+      .btn-verify-in:hover {
         background: #046c4e;
       }
-      .btn-checkin:disabled {
+      .btn-verify-in:disabled {
         background: #9ca3af;
         cursor: not-allowed;
       }
-      .checkin-status {
+      .verify-in-status {
         margin-top: 12px;
         font-size: 0.9rem;
         color: #057a55;
@@ -255,8 +256,8 @@
         font-size: 0.9rem;
       }
 
-      /* ── EMPLOYER ── */
-      .employee-list {
+      /* ── ORGANIZATION ── */
+      .user-list {
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -317,8 +318,8 @@
     <!-- ══ AUTH PAGE ══════════════════════════════════════════ -->
     <div id="auth-page">
       <div class="auth-card">
-        <h1>AttendTrack</h1>
-        <p>Location-based attendance system</p>
+        <h1>CheckPoint</h1>
+        <p>Location-based Presence Tracker</p>
         <div class="tabs">
           <button class="tab active" onclick="switchTab('login')">Login</button>
           <button class="tab" onclick="switchTab('signup')">Sign Up</button>
@@ -348,8 +349,8 @@
           <div class="field">
             <label>Role</label>
             <select id="s-role">
-              <option value="employee">Employee</option>
-              <option value="employer">Employer</option>
+              <option value="user">User</option>
+              <option value="organization">Organization</option>
             </select>
           </div>
           <button class="btn-primary" onclick="doSignup()">
@@ -364,7 +365,7 @@
     <!-- ══ DASHBOARD ══════════════════════════════════════════ -->
     <div id="dashboard">
       <div class="topbar">
-        <div class="brand">📍 AttendTrack</div>
+        <div class="brand">📍 CheckPoint</div>
         <div class="user-info">
           <span id="top-username"></span>
           <span id="top-badge" class="badge"></span>
@@ -373,64 +374,63 @@
       </div>
 
       <div class="container">
-        <!-- Employee Dashboard -->
-        <div id="employee-dash" style="display: none">
+        <!-- User Dashboard -->
+        <div id="user-dash" style="display: none">
           <div class="card">
-            <h2>📌 Check In</h2>
-            <div class="checkin-box">
-              <p>Tap to record your attendance with current location</p>
+            <h2>📌 Verify In</h2>
+            <div class="verify-in-box">
+              <p>Tap to record your presence with current location</p>
               <button
-                class="btn-checkin"
-                id="checkin-btn"
-                onclick="doCheckin()"
+                class="btn-verify-in"
+                id="verify-in-btn"
+                onclick="doVerifyIn()"
               >
-                ✅ Check In Now
+                ✅ Verify In
               </button>
-              <div class="checkin-status" id="checkin-status"></div>
+              <div class="verify-in-status" id="verify-in-status"></div>
             </div>
           </div>
 
           <div class="card">
-            <h2>📋 My Attendance History</h2>
+            <h2>📋 My Presence History</h2>
             <div id="my-history"><div class="loading">Loading...</div></div>
           </div>
         </div>
 
-        <!-- Employer Dashboard -->
-        <div id="employer-dash" style="display: none">
-          <!-- <div class="card">
-            <h2>🏢 Office Settings</h2> -->
+        <!-- Organization Dashboard -->
+        <div id="organization-dash" style="display: none">
+          
           <div class="dash-tabs">
             <button
               class="tab active"
               id="emp-tab-btn"
-              onclick="switchEmployerTab('employees')"
+              onclick="switchOrganizationTab('users')"
             >
-              Employee
+              User
             </button>
 
             <button
               class="tab"
               id="settings-tab-btn"
-              onclick="switchEmployerTab('settings')"
+              onclick="switchOrganizationTab('settings')"
             >
               Settings
             </button>
           </div>
 
-          <div id="employees-tab">
+          <div id="users-tab">
             <div class="card" id="emp-list-card">
-              <h2>👥 Employees</h2>
-              <div id="employee-list" class="employee-list">
+              <h2>👥 Users</h2>
+              <div id="user-list" class="user-list">
                 <div class="loading">Loading...</div>
               </div>
             </div>
 
             <div class="card" id="emp-detail-card" style="display: none">
-              <button class="back-btn" onclick="showEmployeeList()">
+              <button class="back-btn" onclick="showUserList()">
                 ← Back
               </button>
-              <h2 id="emp-detail-title">Attendance History</h2>
+              <h2 id="emp-detail-title">Presence History</h2>
               <div id="emp-detail-table">
                 <div class="loading">Loading...</div>
               </div>
@@ -439,63 +439,47 @@
 
           <div id="settings-tab" style="display: none">
             <div class="card">
-              <h2>🏢 Office Settings</h2>
+              <h2>🏢 Location Settings</h2>
 
               <div class="field">
-                <label>Office Start Time</label>
-                <input id="office-start" type="time" />
+                <label>Location Start Time</label>
+                <input id="location-start" type="time" />
               </div>
 
               <div class="field">
-                <label>Office End Time</label>
-                <input id="office-end" type="time" />
+                <label>Location End Time</label>
+                <input id="location-end" type="time" />
               </div>
 
               <div class="field">
-                <label>Office Latitude</label>
-                <input id="office-lat" type="number" step="any" />
+                <label>Location Latitude</label>
+                <input id="location-lat" type="number" step="any" />
               </div>
 
               <div class="field">
-                <label>Office Longitude</label>
-                <input id="office-lng" type="number" step="any" />
+                <label>Location Longitude</label>
+                <input id="location-lng" type="number" step="any" />
               </div>
 
               <button
                 class="btn-logout"
                 style="margin-bottom: 14px"
-                onclick="detectOfficeLocation()"
+                onclick="detectLocation()"
               >
                 Detect current location
               </button>
 
               <div class="field">
                 <label>Allowed Radius (meters)</label>
-                <input id="office-radius" type="number" />
+                <input id="location-radius" type="number" />
               </div>
 
-              <button class="btn-primary" onclick="saveOfficeSettings()">
+              <button class="btn-primary" onclick="saveLocationSettings()">
                 Save Settings
               </button>
             </div>
           </div>
 
-          <!-- <div class="card" id="emp-list-card">
-            <h2>👥 Employees</h2>
-            <div id="employee-list" class="employee-list">
-              <div class="loading">Loading...</div>
-            </div>
-          </div>
-
-          <div class="card" id="emp-detail-card" style="display: none">
-            <button class="back-btn" onclick="showEmployeeList()">
-              ← Back
-            </button>
-            <h2 id="emp-detail-title">Attendance History</h2>
-            <div id="emp-detail-table">
-              <div class="loading">Loading...</div>
-            </div>
-          </div> -->
         </div>
       </div>
     </div>
@@ -512,7 +496,7 @@
       // ── AUTH HELPERS ──────────────────────────────────────────
       function switchTab(tab) {
         document
-          .querySelectorAll(".tab")
+          .querySelectorAll(".tabs .tab")
           .forEach((t, i) =>
             t.classList.toggle("active", (i === 0) === (tab === "login"))
           );
@@ -580,16 +564,16 @@
           badge.className = "badge badge-" + (role || "");
 
           // hide both first, show correct one
-          document.getElementById("employee-dash").style.display = "none";
-          document.getElementById("employer-dash").style.display = "none";
+          document.getElementById("user-dash").style.display = "none";
+          document.getElementById("organization-dash").style.display = "none";
 
-          if (role === "employee") {
-            document.getElementById("employee-dash").style.display = "block";
+          if (role === "user") {
+            document.getElementById("user-dash").style.display = "block";
             loadMyHistory();
-          } else if (role === "employer") {
-            document.getElementById("employer-dash").style.display = "block";
-            loadOfficeSettings();
-            loadEmployees();
+          } else if (role === "organization") {
+            document.getElementById("organization-dash").style.display = "block";
+            loadLocationSettings();
+            loadUsers();
           } else {
             console.error("Unknown role:", role);
           }
@@ -598,24 +582,24 @@
         }
       }
 
-      // ── EMPLOYEE ACTIONS ──────────────────────────────────────
-      async function doCheckin() {
-        const btn = document.getElementById("checkin-btn");
-        const status = document.getElementById("checkin-status");
+      // ── USER ACTIONS ──────────────────────────────────────
+      async function doVerifyIn() {
+        const btn = document.getElementById("verify-in-btn");
+        const status = document.getElementById("verify-in-status");
         btn.disabled = true;
         status.textContent = "📡 Getting location...";
 
         navigator.geolocation.getCurrentPosition(
           async (pos) => {
             const { latitude, longitude } = pos.coords;
-            const res = await api("/api/checkin", "POST", {
+            const res = await api("/api/verifyin", "POST", {
               latitude,
               longitude,
             });
             if (res.error) {
               status.textContent = "❌ " + res.error;
             } else {
-              status.textContent = `✅ Checked in at ${new Date().toLocaleTimeString()} (${latitude.toFixed(
+              status.textContent = `✅ Verified in at ${new Date().toLocaleTimeString()} (${latitude.toFixed(
                 5
               )}, ${longitude.toFixed(5)})`;
               loadMyHistory();
@@ -630,23 +614,27 @@
       }
 
       async function loadMyHistory() {
-        const rows = await api("/api/my-attendance");
+        const rows = await api("/api/my-presence");
         const el = document.getElementById("my-history");
         el.innerHTML = renderTable(rows);
       }
 
-      // ── EMPLOYER ACTIONS ──────────────────────────────────────
-      async function loadEmployees() {
-        const data = await api("/api/employees");
-        const el = document.getElementById("employee-list");
+      // ── ORGANIZATION ACTIONS ──────────────────────────────────────
+      async function loadUsers() {
+        const data = await api("/api/users");
+        const el = document.getElementById("user-list");
+        if (data.error) {
+          el.innerHTML = `<div class="empty">${data.error}</div>`;
+          return;
+        }
         if (!data.length) {
-          el.innerHTML = '<div class="empty">No employees yet</div>';
+          el.innerHTML = '<div class="empty">No users yet</div>';
           return;
         }
         el.innerHTML = data
           .map(
             (e) =>
-              `<div class="emp-row" onclick="viewEmployee(${e.id}, '${e.username}')">
+              `<div class="emp-row" onclick='viewUser(${e.id}, ${JSON.stringify(e.username)})''>
                 <span class="name">👤 ${e.username}</span>
                 <span class="arrow">›</span>
               </div>`
@@ -654,53 +642,53 @@
           .join("");
       }
 
-      function switchEmployerTab(tab) {
-        document.getElementById("employees-tab").style.display =
-          tab === "employees" ? "" : "none";
+      function switchOrganizationTab(tab) {
+        document.getElementById("users-tab").style.display =
+          tab === "users" ? "" : "none";
 
         document.getElementById("settings-tab").style.display =
           tab === "settings" ? "" : "none";
 
         document
           .getElementById("emp-tab-btn")
-          .classList.toggle("active", tab === "employees");
+          .classList.toggle("active", tab === "users");
 
         document
           .getElementById("settings-tab-btn")
           .classList.toggle("active", tab === "settings");
       }
 
-      async function loadOfficeSettings() {
-        const data = await api("/api/office-settings");
+      async function loadLocationSettings() {
+        const data = await api("/api/location-settings");
         if (data.error) return;
 
-        document.getElementById("office-start").value = data.start_time || "";
-        document.getElementById("office-end").value = data.end_time || "";
-        document.getElementById("office-lat").value = data.latitude || "";
-        document.getElementById("office-lng").value = data.longitude || "";
-        document.getElementById("office-radius").value =
+        document.getElementById("location-start").value = data.start_time || "";
+        document.getElementById("location-end").value = data.end_time || "";
+        document.getElementById("location-lat").value = data.latitude || "";
+        document.getElementById("location-lng").value = data.longitude || "";
+        document.getElementById("location-radius").value =
           data.radius_meters || "";
       }
 
-      async function saveOfficeSettings() {
-        const res = await api("/api/office-settings", "POST", {
-          start_time: document.getElementById("office-start").value,
-          end_time: document.getElementById("office-end").value,
-          latitude: parseFloat(document.getElementById("office-lat").value),
-          longitude: parseFloat(document.getElementById("office-lng").value),
+      async function saveLocationSettings() {
+        const res = await api("/api/location-settings", "POST", {
+          start_time: document.getElementById("location-start").value,
+          end_time: document.getElementById("location-end").value,
+          latitude: parseFloat(document.getElementById("location-lat").value),
+          longitude: parseFloat(document.getElementById("location-lng").value),
           radius_meters: parseFloat(
-            document.getElementById("office-radius").value
+            document.getElementById("location-radius").value
           ),
         });
 
         alert(res.error || res.message);
       }
 
-      function detectOfficeLocation() {
+      function detectLocation() {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            document.getElementById("office-lat").value = pos.coords.latitude;
-            document.getElementById("office-lng").value = pos.coords.longitude;
+            document.getElementById("location-lat").value = pos.coords.latitude;
+            document.getElementById("location-lng").value = pos.coords.longitude;
           },
           () => {
             alert("Unable to detect location");
@@ -708,20 +696,20 @@
         );
       }
 
-      async function viewEmployee(id, name) {
+      async function viewUser(id, name) {
         document.getElementById("emp-list-card").style.display = "none";
         document.getElementById("emp-detail-card").style.display = "";
         document.getElementById(
           "emp-detail-title"
-        ).textContent = `📋 ${name}'s Attendance`;
+        ).textContent = `📋 ${name}'s Presence`;
         document.getElementById("emp-detail-table").innerHTML =
           '<div class="loading">Loading...</div>';
-        const rows = await api(`/api/attendance/${id}`);
+        const rows = await api(`/api/presence/${id}`);
         document.getElementById("emp-detail-table").innerHTML =
           renderTable(rows);
       }
 
-      function showEmployeeList() {
+      function showUserList() {
         document.getElementById("emp-detail-card").style.display = "none";
         document.getElementById("emp-list-card").style.display = "";
       }
@@ -737,7 +725,7 @@
               (r, i) => `
             <tr>
               <td>${i + 1}</td>
-              <td>${new Date(r.checkin_time).toLocaleString()}</td>
+              <td>${new Date(r.verify_in_time).toLocaleString()}</td>
               <td>${r.latitude?.toFixed(6) ?? "—"}</td>
               <td>${r.longitude?.toFixed(6) ?? "—"}</td>
             </tr>`
@@ -758,7 +746,8 @@
         if (body) opts.body = JSON.stringify(body);
         try {
           const res = await fetch(path, opts);
-          const data = await res.json();
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : {};
           if (!res.ok) return { error: data.detail || "Request failed" };
           return data;
         } catch (e) {

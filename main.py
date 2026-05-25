@@ -1,17 +1,19 @@
 # main.py
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from datetime import datetime, timedelta, time
 from math import radians, sin, cos, sqrt, atan2
-import sqlite3, hashlib, secrets, jwt, os
+import sqlite3, hashlib, jwt, os
 
 app = FastAPI()
 SECRET = "change-this-secret-in-production"
 ALGORITHM = "HS256"
-DB = "attendance.db"
+DB = "presence.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INDEX_FILE = os.path.join(BASE_DIR, "static", "index.html")
 bearer = HTTPBearer()
 
 # ── DB SETUP ──────────────────────────────────────────────
@@ -27,17 +29,17 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'employee'
+            role TEXT NOT NULL DEFAULT 'user'
         );
-        CREATE TABLE IF NOT EXISTS attendance (
+        CREATE TABLE IF NOT EXISTS presence (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            checkin_time TEXT NOT NULL,
+            verify_in_time TEXT NOT NULL,
             latitude REAL,
             longitude REAL,
             FOREIGN KEY(user_id) REFERENCES users(id)
         );
-        CREATE TABLE IF NOT EXISTS office_settings (
+        CREATE TABLE IF NOT EXISTS location_settings (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             start_time TEXT NOT NULL,
             end_time TEXT NOT NULL,
@@ -46,6 +48,14 @@ def init_db():
             radius_meters REAL NOT NULL
         );
     """)
+
+    cols = [r["name"] for r in db.execute("PRAGMA table_info(presence)").fetchall()]
+
+    if "verify_in_time" not in cols and "checkin_time" in cols:
+        db.execute(
+            "ALTER TABLE presence RENAME COLUMN checkin_time TO verify_in_time"
+        )
+
     db.commit()
     db.close()
 
@@ -70,13 +80,13 @@ def decode_token(credentials: HTTPAuthorizationCredentials = Depends(bearer)):
 class AuthBody(BaseModel):
     username: str
     password: str
-    role: str = "employee"  # used only for signup
+    role: str = "user"  # used only for signup
 
-class CheckinBody(BaseModel):
+class VerifyinBody(BaseModel):
     latitude: float
     longitude: float
 
-class OfficeSettingsBody(BaseModel):
+class LocationSettingsBody(BaseModel):
     start_time: str
     end_time: str
     latitude: float
@@ -97,8 +107,10 @@ def distance_meters(lat1, lon1, lat2, lon2):
 def signup(body: AuthBody):
     db = get_db()
     try:
+        if body.role not in ["user", "organization"]:
+            raise HTTPException(400, "Invalid role")
         db.execute("INSERT INTO users (username, password, role) VALUES (?,?,?)",
-                   (body.username, hash_pw(body.password), body.role))
+            (body.username, hash_pw(body.password), body.role))
         db.commit()
     except sqlite3.IntegrityError:
         raise HTTPException(400, "Username taken")
@@ -116,15 +128,15 @@ def login(body: AuthBody):
         raise HTTPException(401, "Bad credentials")
     return {"token": make_token(user["id"], user["role"]), "role": user["role"], "username": user["username"]}
 
-# ── EMPLOYEE ROUTES ───────────────────────────────────────
-@app.post("/api/checkin")
-def checkin(body: CheckinBody, token=Depends(decode_token)):
-    if token["role"] != "employee":
-        raise HTTPException(403, "Employees only")
+# ── USER ROUTES ───────────────────────────────────────
+@app.post("/api/verifyin")
+def verifyin(body: VerifyinBody, token=Depends(decode_token)):
+    if token["role"] != "user":
+        raise HTTPException(403, "Users only")
     db = get_db()
 
     settings = db.execute(
-        "SELECT * FROM office_settings WHERE id=1"
+        "SELECT * FROM location_settings WHERE id=1"
     ).fetchone()
 
     if settings:
@@ -132,43 +144,51 @@ def checkin(body: CheckinBody, token=Depends(decode_token)):
         start = time.fromisoformat(settings["start_time"])
         end = time.fromisoformat(settings["end_time"])
 
-        if not (start <= now <= end):
-            raise HTTPException(400, "Outside office hours")
+        if start <= end:
+            allowed = start <= now <= end
+        else:
+            allowed = now >= start or now <= end
+
+        if not allowed:
+            db.close()
+            raise HTTPException(400, "Outside location hours")
 
         dist = distance_meters(
             body.latitude,
             body.longitude,
             settings["latitude"],
             settings["longitude"],
-            settings["radius_meters"],
         )
 
         if dist > settings["radius_meters"]:
-            raise HTTPException(400, "Outside allowed office radius")
+            db.close()
+            raise HTTPException(400, "Outside allowed location radius")
 
-    db.execute("INSERT INTO attendance (user_id, checkin_time, latitude, longitude) VALUES (?,?,?,?)",
+    db.execute("INSERT INTO presence (user_id, verify_in_time, latitude, longitude) VALUES (?,?,?,?)",
                (int(token["sub"]), datetime.now().isoformat(), body.latitude, body.longitude))
     db.commit()
     db.close()
-    return {"message": "Checked in"}
+    return {"message": "Verified in"}
 
-@app.get("/api/my-attendance")
-def my_attendance(token=Depends(decode_token)):
+@app.get("/api/my-presence")
+def my_presence(token=Depends(decode_token)):
+    if token["role"] != "user":
+        raise HTTPException(403, "Users only")
     db = get_db()
-    rows = db.execute("SELECT * FROM attendance WHERE user_id=? ORDER BY checkin_time DESC",
+    rows = db.execute("SELECT * FROM presence WHERE user_id=? ORDER BY verify_in_time DESC",
                       (int(token["sub"]),)).fetchall()
     db.close()
     return [dict(r) for r in rows]
 
-# ── EMPLOYER ROUTES ───────────────────────────────────────
-@app.post("/api/office-settings")
-def save_office_settings(body: OfficeSettingsBody, token=Depends(decode_token)):
-    if token["role"] != "employer":
-        raise HTTPException(403, "Employers only")
+# ── ORGANIZATION ROUTES ───────────────────────────────────────
+@app.post("/api/location-settings")
+def save_location_settings(body: LocationSettingsBody, token=Depends(decode_token)):
+    if token["role"] != "organization":
+        raise HTTPException(403, "Organizations only")
 
     db = get_db()
     db.execute("""
-        INSERT OR REPLACE INTO office_settings
+        INSERT OR REPLACE INTO location_settings
         (id, start_time, end_time, latitude, longitude, radius_meters)
         VALUES (1, ?, ?, ?, ?, ?)
     """, (
@@ -180,35 +200,35 @@ def save_office_settings(body: OfficeSettingsBody, token=Depends(decode_token)):
     ))
     db.commit()
     db.close()
-    return {"message": "Office settings saved"}
+    return {"message": "location settings saved"}
 
-@app.get("/api/office-settings")
-def get_office_settings(token=Depends(decode_token)):
-    if token["role"] != "employer":
-        raise HTTPException(403, "Employers only")
+@app.get("/api/location-settings")
+def get_location_settings(token=Depends(decode_token)):
+    if token["role"] != "organization":
+        raise HTTPException(403, "Organizations only")
 
     db = get_db()
     row = db.execute(
-        "SELECT * FROM office_settings WHERE id=1"
+        "SELECT * FROM location_settings WHERE id=1"
     ).fetchone()
     db.close()
     return dict(row) if row else {}
 
-@app.get("/api/employees")
-def list_employees(token=Depends(decode_token)):
-    if token["role"] != "employer":
-        raise HTTPException(403, "Employers only")
+@app.get("/api/users")
+def list_users(token=Depends(decode_token)):
+    if token["role"] != "organization":
+        raise HTTPException(403, "Organizations only")
     db = get_db()
-    rows = db.execute("SELECT id, username FROM users WHERE role='employee'").fetchall()
+    rows = db.execute("SELECT id, username FROM users WHERE role='user'").fetchall()
     db.close()
     return [dict(r) for r in rows]
 
-@app.get("/api/attendance/{user_id}")
-def employee_attendance(user_id: int, token=Depends(decode_token)):
-    if token["role"] != "employer":
-        raise HTTPException(403, "Employers only")
+@app.get("/api/presence/{user_id}")
+def user_presence(user_id: int, token=Depends(decode_token)):
+    if token["role"] != "organization":
+        raise HTTPException(403, "Organizations only")
     db = get_db()
-    rows = db.execute("SELECT * FROM attendance WHERE user_id=? ORDER BY checkin_time DESC",
+    rows = db.execute("SELECT * FROM presence WHERE user_id=? ORDER BY verify_in_time DESC",
                       (user_id,)).fetchall()
     db.close()
     return [dict(r) for r in rows]
@@ -216,6 +236,12 @@ def employee_attendance(user_id: int, token=Depends(decode_token)):
 # ── SERVE FRONTEND ────────────────────────────────────────
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+@app.get("/")
+def root():
+    return FileResponse(INDEX_FILE)
+
 @app.get("/{full_path:path}")
 def serve_frontend(full_path: str):
-    return FileResponse("static/index.html")
+    if full_path.startswith("api/"):
+        raise HTTPException(404, "Not found")
+    return FileResponse(INDEX_FILE)
