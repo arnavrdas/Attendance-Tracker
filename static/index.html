@@ -387,6 +387,16 @@
               >
                 ✅ Verify In
               </button>
+
+              <button
+                class="btn-verify-in"
+                id="verify-out-btn"
+                onclick="doVerifyOut()"
+                style="background:#b91c1c;margin-left:10px"
+              >
+                ⛔ Verify Out
+              </button>
+
               <div class="verify-in-status" id="verify-in-status"></div>
             </div>
           </div>
@@ -613,6 +623,24 @@
         );
       }
 
+      async function doVerifyOut() {
+        const btn = document.getElementById("verify-out-btn");
+        const status = document.getElementById("verify-in-status");
+
+        btn.disabled = true;
+
+        const res = await api("/api/verifyout", "POST");
+
+        if (res.error) {
+          status.textContent = "❌ " + res.error;
+        } else {
+          status.textContent = `⛔ Verified out at ${new Date().toLocaleTimeString()}`;
+          loadMyHistory();
+        }
+
+        btn.disabled = false;
+      }
+
       async function loadMyHistory() {
         const rows = await api("/api/my-presence");
         const el = document.getElementById("my-history");
@@ -719,13 +747,14 @@
         if (!rows || rows.error || rows.length === 0)
           return '<div class="empty">No records found</div>';
         return `<table>
-          <thead><tr><th>#</th><th>Date & Time</th><th>Latitude</th><th>Longitude</th></tr></thead>
+          <thead><tr><th>#</th><th>Verify In</th><th>Verify Out</th><th>Latitude</th><th>Longitude</th></tr></thead>
           <tbody>${rows
             .map(
               (r, i) => `
             <tr>
               <td>${i + 1}</td>
               <td>${new Date(r.verify_in_time).toLocaleString()}</td>
+              <td>${r.verify_out_time ? new Date(r.verify_out_time).toLocaleString() : "—"}</td>
               <td>${r.latitude?.toFixed(6) ?? "—"}</td>
               <td>${r.longitude?.toFixed(6) ?? "—"}</td>
             </tr>`

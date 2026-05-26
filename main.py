@@ -35,6 +35,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
             verify_in_time TEXT NOT NULL,
+            verify_out_time TEXT,
             latitude REAL,
             longitude REAL,
             FOREIGN KEY(user_id) REFERENCES users(id)
@@ -54,6 +55,11 @@ def init_db():
     if "verify_in_time" not in cols and "checkin_time" in cols:
         db.execute(
             "ALTER TABLE presence RENAME COLUMN checkin_time TO verify_in_time"
+        )
+
+    if "verify_out_time" not in cols:
+        db.execute(
+            "ALTER TABLE presence ADD COLUMN verify_out_time TEXT"
         )
 
     db.commit()
@@ -169,6 +175,34 @@ def verifyin(body: VerifyinBody, token=Depends(decode_token)):
     db.commit()
     db.close()
     return {"message": "Verified in"}
+
+@app.post("/api/verifyout")
+def verifyout(token=Depends(decode_token)):
+    if token["role"] != "user":
+        raise HTTPException(403, "Users only")
+
+    db = get_db()
+
+    row = db.execute("""
+        SELECT id FROM presence
+        WHERE user_id=? AND verify_out_time IS NULL
+        ORDER BY verify_in_time DESC
+        LIMIT 1
+    """, (int(token["sub"]),)).fetchone()
+
+    if not row:
+        db.close()
+        raise HTTPException(400, "No active verify-in found")
+
+    db.execute("""
+        UPDATE presence
+        SET verify_out_time=?
+        WHERE id=?
+    """, (datetime.now().isoformat(), row["id"]))
+
+    db.commit()
+    db.close()
+    return {"message": "Verified out"}
 
 @app.get("/api/my-presence")
 def my_presence(token=Depends(decode_token)):
