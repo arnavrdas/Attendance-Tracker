@@ -18,7 +18,7 @@ bearer = HTTPBearer()
 
 # ── DB SETUP ──────────────────────────────────────────────
 def get_db():
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -38,6 +38,7 @@ def init_db():
             verify_out_time TEXT,
             latitude REAL,
             longitude REAL,
+            
             FOREIGN KEY(user_id) REFERENCES users(id)
         );
         CREATE TABLE IF NOT EXISTS location_settings (
@@ -139,7 +140,29 @@ def login(body: AuthBody):
 def verifyin(body: VerifyinBody, token=Depends(decode_token)):
     if token["role"] != "user":
         raise HTTPException(403, "Users only")
+
     db = get_db()
+    today = datetime.now().date().isoformat()
+
+    existing = db.execute("""
+        SELECT id FROM presence
+        WHERE user_id=?
+        AND date(verify_in_time)=?
+    """, (int(token["sub"]), today)).fetchone()
+
+    if existing:
+        db.close()
+        raise HTTPException(400, "Already verified in today")
+
+    active = db.execute("""
+        SELECT id FROM presence
+        WHERE user_id=?
+        AND verify_out_time IS NULL
+    """, (int(token["sub"]),)).fetchone()
+
+    if active:
+        db.close()
+        raise HTTPException(400, "Previous session not verified out")
 
     settings = db.execute(
         "SELECT * FROM location_settings WHERE id=1"
@@ -182,13 +205,16 @@ def verifyout(token=Depends(decode_token)):
         raise HTTPException(403, "Users only")
 
     db = get_db()
+    today = datetime.now().date().isoformat()
 
     row = db.execute("""
         SELECT id FROM presence
-        WHERE user_id=? AND verify_out_time IS NULL
+        WHERE user_id=?
+        AND verify_out_time IS NULL
+        AND date(verify_in_time)=?
         ORDER BY verify_in_time DESC
         LIMIT 1
-    """, (int(token["sub"]),)).fetchone()
+    """, (int(token["sub"]), today)).fetchone()
 
     if not row:
         db.close()
