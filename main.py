@@ -36,6 +36,8 @@ def init_db():
             user_id INTEGER NOT NULL,
             verify_in_time TEXT NOT NULL,
             verify_out_time TEXT,
+            verify_in_remark TEXT,
+            verify_out_remark TEXT,
             latitude REAL,
             longitude REAL,
             
@@ -61,6 +63,16 @@ def init_db():
     if "verify_out_time" not in cols:
         db.execute(
             "ALTER TABLE presence ADD COLUMN verify_out_time TEXT"
+        )
+
+    if "verify_in_remark" not in cols:
+        db.execute(
+            "ALTER TABLE presence ADD COLUMN verify_in_remark TEXT"
+        )
+
+    if "verify_out_remark" not in cols:
+        db.execute(
+            "ALTER TABLE presence ADD COLUMN verify_out_remark TEXT"
         )
 
     db.commit()
@@ -168,19 +180,11 @@ def verifyin(body: VerifyinBody, token=Depends(decode_token)):
         "SELECT * FROM location_settings WHERE id=1"
     ).fetchone()
 
+    remark = "✅ Arrived on time"
+
     if settings:
         now = datetime.now().time()
         start = time.fromisoformat(settings["start_time"])
-        end = time.fromisoformat(settings["end_time"])
-
-        if start <= end:
-            allowed = start <= now <= end
-        else:
-            allowed = now >= start or now <= end
-
-        if not allowed:
-            db.close()
-            raise HTTPException(400, "Outside location hours")
 
         dist = distance_meters(
             body.latitude,
@@ -190,17 +194,32 @@ def verifyin(body: VerifyinBody, token=Depends(decode_token)):
         )
 
         if dist > settings["radius_meters"]:
-            db.close()
-            raise HTTPException(400, "Outside allowed location radius")
+            remark = "❌ Not at the location"
+        elif now > start:
+            remark = "❌ Arrived late"
 
-    db.execute("INSERT INTO presence (user_id, verify_in_time, latitude, longitude) VALUES (?,?,?,?)",
-               (int(token["sub"]), datetime.now().isoformat(), body.latitude, body.longitude))
+    db.execute("""
+        INSERT INTO presence (
+            user_id,
+            verify_in_time,
+            verify_in_remark,
+            latitude,
+            longitude
+        )
+        VALUES (?,?,?,?,?)
+    """, (
+        int(token["sub"]),
+        datetime.now().isoformat(),
+        remark,
+        body.latitude,
+        body.longitude
+    ))
     db.commit()
     db.close()
-    return {"message": "Verified in"}
+    return {"message": remark}
 
 @app.post("/api/verifyout")
-def verifyout(token=Depends(decode_token)):
+def verifyout(body: VerifyinBody, token=Depends(decode_token)):
     if token["role"] != "user":
         raise HTTPException(403, "Users only")
 
@@ -208,7 +227,8 @@ def verifyout(token=Depends(decode_token)):
     today = datetime.now().date().isoformat()
 
     row = db.execute("""
-        SELECT id FROM presence
+        SELECT *
+        FROM presence
         WHERE user_id=?
         AND verify_out_time IS NULL
         AND date(verify_in_time)=?
@@ -218,17 +238,44 @@ def verifyout(token=Depends(decode_token)):
 
     if not row:
         db.close()
-        raise HTTPException(400, "No active verify-in found")
+        raise HTTPException(400, "Already verified out today")
+
+    settings = db.execute(
+        "SELECT * FROM location_settings WHERE id=1"
+    ).fetchone()
+
+    remark = "✅ Left on time"
+
+    if settings:
+        now = datetime.now().time()
+        end = time.fromisoformat(settings["end_time"])
+
+        dist = distance_meters(
+            body.latitude,
+            body.longitude,
+            settings["latitude"],
+            settings["longitude"],
+        )
+
+        if dist > settings["radius_meters"]:
+            remark = "❌ Not at the location"
+        elif now < end:
+            remark = "❌ Leaving early"
 
     db.execute("""
         UPDATE presence
-        SET verify_out_time=?
+        SET verify_out_time=?,
+            verify_out_remark=?
         WHERE id=?
-    """, (datetime.now().isoformat(), row["id"]))
+    """, (
+        datetime.now().isoformat(),
+        remark,
+        row["id"]
+    ))
 
     db.commit()
     db.close()
-    return {"message": "Verified out"}
+    return {"message": remark}
 
 @app.get("/api/my-presence")
 def my_presence(token=Depends(decode_token)):

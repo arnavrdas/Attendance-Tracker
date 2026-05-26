@@ -628,18 +628,34 @@
         const status = document.getElementById("verify-in-status");
 
         btn.disabled = true;
+        status.textContent = "📡 Getting location...";
 
-        const res = await api("/api/verifyout", "POST");
+        navigator.geolocation.getCurrentPosition(
+          async (pos) => {
+            try {
+              const { latitude, longitude } = pos.coords;
 
-        if (res.error) {
-          status.textContent = "❌ " + res.error;
-        } else {
-          status.textContent = `⛔ Verified out at ${new Date().toLocaleTimeString()}`;
-          loadMyHistory();
-        }
+              const res = await api("/api/verifyout", "POST", {
+                latitude,
+                longitude,
+              });
 
-        btn.disabled = false;
+              status.textContent = res.error
+                ? "❌ " + res.error
+                : res.message;
+
+              loadMyHistory();
+            } finally {
+              btn.disabled = false;
+            }
+          },
+          () => {
+            status.textContent = "❌ Location denied. Enable browser location.";
+            btn.disabled = false;
+          }
+        );
       }
+
 
       async function loadMyHistory() {
         const rows = await api("/api/my-presence");
@@ -746,8 +762,17 @@
       function renderTable(rows) {
         if (!rows || rows.error || rows.length === 0)
           return '<div class="empty">No records found</div>';
+
         return `<table>
-          <thead><tr><th>#</th><th>Verify In</th><th>Verify Out</th><th>Latitude</th><th>Longitude</th></tr></thead>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Verify In</th>
+              <th>Verify Out</th>
+              <th>Arrival</th>
+              <th>Departure</th>
+            </tr>
+          </thead>
           <tbody>${rows
             .map(
               (r, i) => `
@@ -755,8 +780,8 @@
               <td>${i + 1}</td>
               <td>${new Date(r.verify_in_time).toLocaleString()}</td>
               <td>${r.verify_out_time ? new Date(r.verify_out_time).toLocaleString() : "—"}</td>
-              <td>${r.latitude?.toFixed(6) ?? "—"}</td>
-              <td>${r.longitude?.toFixed(6) ?? "—"}</td>
+              <td>${r.verify_in_remark ?? "—"}</td>
+              <td>${r.verify_out_remark ?? "—"}</td>
             </tr>`
             )
             .join("")}
