@@ -243,6 +243,14 @@
         padding: 10px 12px;
         border-bottom: 1px solid #f3f4f6;
       }
+      .time-ok {
+        color: #057a55;
+        font-weight: 700;
+      }
+      .time-bad {
+        color: #b91c1c;
+        font-weight: 700;
+      }
       tr:last-child td {
         border-bottom: none;
       }
@@ -660,7 +668,9 @@
       async function loadMyHistory() {
         const rows = await api("/api/my-presence");
         const el = document.getElementById("my-history");
-        el.innerHTML = renderTable(rows);
+        const settings = await api("/api/public-location-settings");
+        el.innerHTML = renderTable(rows, settings);
+
       }
 
       // ── ORGANIZATION ACTIONS ──────────────────────────────────────
@@ -750,7 +760,7 @@
           '<div class="loading">Loading...</div>';
         const rows = await api(`/api/presence/${id}`);
         document.getElementById("emp-detail-table").innerHTML =
-          renderTable(rows);
+        renderTable(rows, await api("/api/public-location-settings"));
       }
 
       function showUserList() {
@@ -759,7 +769,7 @@
       }
 
       // ── HELPERS ───────────────────────────────────────────────
-      function renderTable(rows) {
+      function renderTable(rows, settings = {}) {
         if (!rows || rows.error || rows.length === 0)
           return '<div class="empty">No records found</div>';
 
@@ -767,8 +777,7 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>Verify In</th>
-              <th>Verify Out</th>
+              <th>Date</th>
               <th>Arrival</th>
               <th>Departure</th>
             </tr>
@@ -778,15 +787,81 @@
               (r, i) => `
             <tr>
               <td>${i + 1}</td>
-              <td>${new Date(r.verify_in_time).toLocaleString()}</td>
-              <td>${r.verify_out_time ? new Date(r.verify_out_time).toLocaleString() : "—"}</td>
-              <td>${r.verify_in_remark ?? "—"}</td>
-              <td>${r.verify_out_remark ?? "—"}</td>
+              <td>${formatDate(r.verify_in_time)}</td>
+              <td class="${isArrivalOnTime(r, settings) ? "time-ok" : "time-bad"}">
+                ${formatTime(r.verify_in_time)}
+              </td>
+              <td class="${isDepartureOnTime(r, settings) ? "time-ok" : "time-bad"}">
+                ${r.verify_out_time ? formatTime(r.verify_out_time) : "—"}
+              </td>
             </tr>`
             )
             .join("")}
           </tbody>
         </table>`;
+      }
+
+      function formatDate(value) {
+        const d = new Date(value);
+        const now = new Date();
+
+        const diffDays = Math.floor(
+          (now - d) / (1000 * 60 * 60 * 24)
+        );
+
+        if (diffDays < 7) {
+          return d.toLocaleDateString([], {
+            weekday: "short",
+          });
+        }
+
+        const day = String(d.getDate()).padStart(2, "0");
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const year = d.getFullYear();
+
+        return `${day}-${month}-${year}`;
+      }
+
+      function formatTime(value) {
+        const d = new Date(value);
+
+        return d.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        });
+      }
+
+      function isArrivalOnTime(row, settings) {
+        const configured = settings?.start_time;
+ 
+        if (!configured) return true;
+
+        const d = new Date(row.verify_in_time);
+
+        const hhmm =
+          String(d.getHours()).padStart(2, "0") +
+          ":" +
+          String(d.getMinutes()).padStart(2, "0");
+
+        return hhmm <= configured;
+      }
+
+      function isDepartureOnTime(row, settings) {
+        if (!row.verify_out_time) return true;
+
+        const configured = settings?.end_time;
+
+        if (!configured) return true;
+
+        const d = new Date(row.verify_out_time);
+
+        const hhmm =
+          String(d.getHours()).padStart(2, "0") +
+          ":" +
+          String(d.getMinutes()).padStart(2, "0");
+
+        return hhmm >= configured;
       }
 
       async function api(path, method = "GET", body = null) {

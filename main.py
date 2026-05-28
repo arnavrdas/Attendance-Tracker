@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta, time, timezone
 from math import radians, sin, cos, sqrt, atan2
 import sqlite3, hashlib, jwt, os
 
@@ -12,6 +12,7 @@ app = FastAPI()
 SECRET = "change-this-secret-in-production"
 ALGORITHM = "HS256"
 DB = "presence.db"
+MAX_SESSION_HOURS = int(os.getenv("MAX_SESSION_HOURS", "16"))
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_FILE = os.path.join(BASE_DIR, "static", "index.html")
 bearer = HTTPBearer()
@@ -20,7 +21,18 @@ bearer = HTTPBearer()
 def get_db():
     conn = sqlite3.connect(DB, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
+
+def utc_now():
+    return datetime.now(timezone.utc)
+
+def utc_now_iso():
+    return utc_now().isoformat()
+
+def parse_utc(value: str):
+    return datetime.fromisoformat(value)
 
 def init_db():
     db = get_db()
@@ -36,10 +48,10 @@ def init_db():
             user_id INTEGER NOT NULL,
             verify_in_time TEXT NOT NULL,
             verify_out_time TEXT,
-            verify_in_remark TEXT,
-            verify_out_remark TEXT,
             latitude REAL,
             longitude REAL,
+            closed_reason TEXT,
+            auto_closed INTEGER NOT NULL DEFAULT 0,
             
             FOREIGN KEY(user_id) REFERENCES users(id)
         );
@@ -60,20 +72,21 @@ def init_db():
             "ALTER TABLE presence RENAME COLUMN checkin_time TO verify_in_time"
         )
 
-    if "verify_out_time" not in cols:
+    if "closed_reason" not in cols:
         db.execute(
-            "ALTER TABLE presence ADD COLUMN verify_out_time TEXT"
+            "ALTER TABLE presence ADD COLUMN closed_reason TEXT"
         )
 
-    if "verify_in_remark" not in cols:
+    if "auto_closed" not in cols:
         db.execute(
-            "ALTER TABLE presence ADD COLUMN verify_in_remark TEXT"
+            "ALTER TABLE presence ADD COLUMN auto_closed INTEGER NOT NULL DEFAULT 0"
         )
 
-    if "verify_out_remark" not in cols:
-        db.execute(
-            "ALTER TABLE presence ADD COLUMN verify_out_remark TEXT"
-        )
+    db.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_presence_one_open_session
+        ON presence(user_id)
+        WHERE verify_out_time IS NULL
+    """)
 
     db.commit()
     db.close()
@@ -121,6 +134,34 @@ def distance_meters(lat1, lon1, lat2, lon2):
         + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
     )
     return 2 * R * atan2(sqrt(a), sqrt(1 - a))
+
+def auto_close_abandoned_sessions(db):
+    cutoff = utc_now() - timedelta(hours=MAX_SESSION_HOURS)
+
+    stale_rows = db.execute("""
+        SELECT id, verify_in_time
+        FROM presence
+        WHERE verify_out_time IS NULL
+    """).fetchall()
+
+    for row in stale_rows:
+        checkin = parse_utc(row["verify_in_time"])
+
+        if checkin <= cutoff:
+            checkout_time = checkin + timedelta(hours=MAX_SESSION_HOURS)
+
+            db.execute("""
+                UPDATE presence
+                SET verify_out_time=?,
+                    closed_reason=?,
+                    auto_closed=1
+                WHERE id=?
+                AND verify_out_time IS NULL
+            """, (
+                checkout_time.isoformat(),
+                "MAX_DURATION_EXCEEDED",
+                row["id"]
+            ))
 # ── AUTH ROUTES ───────────────────────────────────────────
 @app.post("/api/signup")
 def signup(body: AuthBody):
@@ -154,69 +195,92 @@ def verifyin(body: VerifyinBody, token=Depends(decode_token)):
         raise HTTPException(403, "Users only")
 
     db = get_db()
-    today = datetime.now().date().isoformat()
+    user_id = int(token["sub"])
 
-    existing = db.execute("""
-        SELECT id FROM presence
-        WHERE user_id=?
-        AND date(verify_in_time)=?
-    """, (int(token["sub"]), today)).fetchone()
+    try:
+        db.execute("BEGIN IMMEDIATE")
 
-    if existing:
-        db.close()
-        raise HTTPException(400, "Already verified in today")
+        auto_close_abandoned_sessions(db)
 
-    active = db.execute("""
-        SELECT id FROM presence
-        WHERE user_id=?
-        AND verify_out_time IS NULL
-    """, (int(token["sub"]),)).fetchone()
+        active = db.execute("""
+            SELECT *
+            FROM presence
+            WHERE user_id=?
+            AND verify_out_time IS NULL
+            LIMIT 1
+        """, (user_id,)).fetchone()
 
-    if active:
-        db.close()
-        raise HTTPException(400, "Previous session not verified out")
+        if active:
+            db.commit()
+            return {
+                "message": "Already checked in",
+                "session": dict(active),
+                "state": "IN"
+            }
 
-    settings = db.execute(
-        "SELECT * FROM location_settings WHERE id=1"
-    ).fetchone()
+        settings = db.execute(
+            "SELECT * FROM location_settings WHERE id=1"
+        ).fetchone()
 
-    remark = "✅ Arrived on time"
+        if settings:
+            dist = distance_meters(
+                body.latitude,
+                body.longitude,
+                settings["latitude"],
+                settings["longitude"],
+            )
 
-    if settings:
-        now = datetime.now().time()
-        start = time.fromisoformat(settings["start_time"])
+            if dist > settings["radius_meters"]:
+                db.rollback()
+                raise HTTPException(400, "Outside allowed location")
 
-        dist = distance_meters(
-            body.latitude,
-            body.longitude,
-            settings["latitude"],
-            settings["longitude"],
-        )
-
-        if dist > settings["radius_meters"]:
-            remark = "❌ Not at the location"
-        elif now > start:
-            remark = "❌ Arrived late"
-
-    db.execute("""
-        INSERT INTO presence (
+        cursor = db.execute("""
+            INSERT INTO presence (
+                user_id,
+                verify_in_time,
+                latitude,
+                longitude
+            )
+            VALUES (?,?,?,?)
+        """, (
             user_id,
-            verify_in_time,
-            verify_in_remark,
-            latitude,
-            longitude
-        )
-        VALUES (?,?,?,?,?)
-    """, (
-        int(token["sub"]),
-        datetime.now().isoformat(),
-        remark,
-        body.latitude,
-        body.longitude
-    ))
-    db.commit()
-    db.close()
-    return {"message": remark}
+            utc_now_iso(),
+            body.latitude,
+            body.longitude
+        ))
+
+        session = db.execute("""
+            SELECT *
+            FROM presence
+            WHERE id=?
+        """, (cursor.lastrowid,)).fetchone()
+
+        db.commit()
+
+        return {
+            "message": "Checked in",
+            "session": dict(session),
+            "state": "IN"
+        }
+
+    except sqlite3.IntegrityError:
+        active = db.execute("""
+            SELECT *
+            FROM presence
+            WHERE user_id=?
+            AND verify_out_time IS NULL
+            LIMIT 1
+        """, (user_id,)).fetchone()
+
+        db.rollback()
+
+        return {
+            "message": "Already checked in",
+            "session": dict(active),
+            "state": "IN"
+        }
+    finally:
+        db.close()
 
 @app.post("/api/verifyout")
 def verifyout(body: VerifyinBody, token=Depends(decode_token)):
@@ -224,58 +288,71 @@ def verifyout(body: VerifyinBody, token=Depends(decode_token)):
         raise HTTPException(403, "Users only")
 
     db = get_db()
-    today = datetime.now().date().isoformat()
+    user_id = int(token["sub"])
 
-    row = db.execute("""
-        SELECT *
-        FROM presence
-        WHERE user_id=?
-        AND verify_out_time IS NULL
-        AND date(verify_in_time)=?
-        ORDER BY verify_in_time DESC
-        LIMIT 1
-    """, (int(token["sub"]), today)).fetchone()
+    try:
+        db.execute("BEGIN IMMEDIATE")
 
-    if not row:
+        auto_close_abandoned_sessions(db)
+
+        row = db.execute("""
+            SELECT *
+            FROM presence
+            WHERE user_id=?
+            AND verify_out_time IS NULL
+            ORDER BY verify_in_time DESC
+            LIMIT 1
+        """, (user_id,)).fetchone()
+
+        if not row:
+            db.rollback()
+            raise HTTPException(400, "No active session")
+
+        settings = db.execute(
+            "SELECT * FROM location_settings WHERE id=1"
+        ).fetchone()
+
+        if settings:
+            dist = distance_meters(
+                body.latitude,
+                body.longitude,
+                settings["latitude"],
+                settings["longitude"],
+            )
+
+            if dist > settings["radius_meters"]:
+                db.rollback()
+                raise HTTPException(400, "Outside allowed location")
+
+        checkout_time = utc_now_iso()
+
+        db.execute("""
+            UPDATE presence
+            SET verify_out_time=?,
+                closed_reason=?
+            WHERE id=?
+            AND verify_out_time IS NULL
+        """, (
+            checkout_time,
+            "USER_CHECKOUT",
+            row["id"]
+        ))
+
+        session = db.execute("""
+            SELECT *
+            FROM presence
+            WHERE id=?
+        """, (row["id"],)).fetchone()
+
+        db.commit()
+
+        return {
+            "message": "Checked out",
+            "session": dict(session),
+            "state": "OUT"
+        }
+    finally:
         db.close()
-        raise HTTPException(400, "Already verified out today")
-
-    settings = db.execute(
-        "SELECT * FROM location_settings WHERE id=1"
-    ).fetchone()
-
-    remark = "✅ Left on time"
-
-    if settings:
-        now = datetime.now().time()
-        end = time.fromisoformat(settings["end_time"])
-
-        dist = distance_meters(
-            body.latitude,
-            body.longitude,
-            settings["latitude"],
-            settings["longitude"],
-        )
-
-        if dist > settings["radius_meters"]:
-            remark = "❌ Not at the location"
-        elif now < end:
-            remark = "❌ Leaving early"
-
-    db.execute("""
-        UPDATE presence
-        SET verify_out_time=?,
-            verify_out_remark=?
-        WHERE id=?
-    """, (
-        datetime.now().isoformat(),
-        remark,
-        row["id"]
-    ))
-
-    db.commit()
-    db.close()
-    return {"message": remark}
 
 @app.get("/api/my-presence")
 def my_presence(token=Depends(decode_token)):
@@ -285,6 +362,7 @@ def my_presence(token=Depends(decode_token)):
     rows = db.execute("SELECT * FROM presence WHERE user_id=? ORDER BY verify_in_time DESC",
                       (int(token["sub"]),)).fetchall()
     db.close()
+    
     return [dict(r) for r in rows]
 
 # ── ORGANIZATION ROUTES ───────────────────────────────────────
@@ -321,6 +399,20 @@ def get_location_settings(token=Depends(decode_token)):
     db.close()
     return dict(row) if row else {}
 
+@app.get("/api/public-location-settings")
+def public_location_settings():
+    db = get_db()
+
+    row = db.execute("""
+        SELECT start_time, end_time
+        FROM location_settings
+        WHERE id=1
+    """).fetchone()
+
+    db.close()
+
+    return dict(row) if row else {}
+
 @app.get("/api/users")
 def list_users(token=Depends(decode_token)):
     if token["role"] != "organization":
@@ -338,6 +430,7 @@ def user_presence(user_id: int, token=Depends(decode_token)):
     rows = db.execute("SELECT * FROM presence WHERE user_id=? ORDER BY verify_in_time DESC",
                       (user_id,)).fetchall()
     db.close()
+    
     return [dict(r) for r in rows]
 
 # ── SERVE FRONTEND ────────────────────────────────────────
